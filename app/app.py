@@ -93,6 +93,18 @@ class Entry(flask_db.Model):
     def drafts(cls):
         return Entry.select().where(Entry.published == False)
 
+    @property
+    def html_content(self):
+        hilite = CodeHiliteExtension(linenums=False, css_class='highlight')
+        extras = ExtraExtension()
+        markdown_content = markdown(self.content, extensions=[hilite, extras])
+        oembed_content = parse_html(
+            markdown_content,
+            oembed_providers,
+            urlize_all=True,
+            maxwidth=app.config['SITE_WIDTH'])
+        return Markup(oembed_content)
+
 ## Search index
 class FTSEntry(FTSModel):
     entry_id = IntegerField(Entry)
@@ -166,6 +178,15 @@ def index():
 def drafts():
     query = Entry.drafts().order_by(Entry.timestamp.desc())
     return object_list('index.html', query)
+
+@app.route('/<slug>/')
+def detail(slug):
+    if session.get('logged_in'):
+        query = Entry.select()
+    else:
+        query = Entry.public()
+    entry = get_object_or_404(query, Entry.slug == slug)
+    return render_template('detail.html', entry=entry)
 
 # Initialization Codes --------------------------------------------------------
 
