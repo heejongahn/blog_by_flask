@@ -179,6 +179,48 @@ def drafts():
     query = Entry.drafts().order_by(Entry.timestamp.desc())
     return object_list('index.html', query)
 
+## Create entry page
+@app.route('/create/', methods=['GET', 'POST'])
+@login_required
+def create():
+    if request.method == 'POST':
+        if request.form.get('title') and request.form.get('content'):
+            entry = Entry.create(
+                title=request.form['title'],
+                content=request.form['title'],
+                published=request.form.get('published') or False)
+            flash('Entry created successfully.', 'success')
+            if entry.published:
+                return redirect(url_for('detail', slug=entry.slug))
+            else:
+                return redirect(url_for('edit', slug=entry.slug))
+        else:
+            flash('Title and Content are required.', 'danger')
+    return render_template('create.html')
+
+## Edit entry page
+@app.route('/<slug>/edit/', methods=['GET', 'POST'])
+@login_required
+def edit(slug):
+    entry = get_object_or_404(Entry, Entry.slug == slug)
+    if request.method == 'POST':
+        if request.form.get('title') and request.form.get('content'):
+            entry.title = request.form['title']
+            entry.content = request.form['content']
+            entry.published = request.form.get('published') or False
+            entry.save()
+
+            flash('Entry saved successfully.', 'success')
+            if entry.published:
+                return redirect(url_for('detail', slug=entry.slug))
+            else:
+                return redirect(url_for('edit', slug=entry.slug))
+        else:
+            flash('Title and Content are required.', 'danger')
+
+    return render_template('edit.html', entry=entry)
+
+## Detail entry page
 @app.route('/<slug>/')
 def detail(slug):
     if session.get('logged_in'):
