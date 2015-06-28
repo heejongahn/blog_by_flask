@@ -72,3 +72,29 @@ class FTSEntry(FTSModel):
 
     class Meta:
         database = database
+
+# Initialization Codes --------------------------------------------------------
+
+## Template Filter
+@app.template_filter('clean_querystring')
+def clean_querystring(request_args, *keys_to_remove, **new_values):
+    querystring = dict((key, value) for key, value in request_args.items())
+    for key in keys_to_remove:
+        querystring.pop(key, None)
+    querystring.update(new_values)
+    return urllib.urlencode(querystring)
+
+## 404 Error Handler
+@app.errorhandler(404)
+def not_found(exc):
+    return Response('<h3>Not found</h3>'), 404
+
+# When we start the app in debug mode by running it from the command-line,
+# we'll automatically create the database tables if they don't exist,
+# and start the development server.
+def main():
+    database.create_tables([Entry, FTSEntry], safe=True)
+    app.run(debug=True)
+
+if __name__ == '__main__':
+    main()
