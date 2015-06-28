@@ -65,6 +65,34 @@ class Entry(flask_db.Model):
         fts_entry.content = '\n'.join((self.title, self.content))
         fts_entry.save(force_insert=force_insert)
 
+    @classmethod
+    def public(cls):
+        return Entry.select().where(Entry.published == True)
+
+    @classmethod
+    def search(cls, query):
+        words = [word.strip() for word in query.split() if word.strip()]
+        if not words:
+            # Return empty query.
+            return Entry.select().where(Entry.id == 0)
+        else:
+            search = ' '.join(words)
+
+        return (FTSEntry
+                .select(
+                    FTSEntry,
+                    Entry,
+                    FTSEntry.rank().alias('score'))
+                .join(Entry, on=(FTSEntry.entry_id == Entry.id).alias('entry'))
+                .where(
+                    (Entry.published == True) &
+                    (FTSEntry.match(search)))
+                .order_by(SQL('score').desc()))
+
+    @classmethod
+    def drafts(cls):
+        return Entry.select().where(Entry.published == False)
+
 ## Search index
 class FTSEntry(FTSModel):
     entry_id = IntegerField(Entry)
@@ -91,16 +119,25 @@ def login_required(fn):
 ## Login Function
 @app.route('/login/', methods=['GET', 'POST'])
 def login():
+    # If redirected, next_url is set
     next_url = request.args.get('next') or request.form.get('next')
+
+    # Login trial w/ password from user
     if request.method == 'POST' and request.form.get('password'):
         password = request.form.get('password')
+
+        # If valid password, log in and redirect to next_url / index page
         if password == app.config['ADMIN_PASSWORD']:
             session['logged_in'] = True
             session.permanent = True  # Use cookie to store session.
             flash('You are now logged in.', 'success')
             return redirect(next_url or url_for('index'))
+
+        # Invalid password
         else:
             flash('Incorrect password.', 'danger')
+
+    # Login page GET
     return render_template('login.html', next_url=next_url)
 
 ## Logout Function
@@ -111,6 +148,24 @@ def logout():
         return redirect(url_for('login'))
     return render_template('logout.html')
 
+# Views ----------------------------------------------------------------------
+
+## Index page : Shows maximum 20 posts / page, newest to oldest
+@app.route('/')
+def index():
+    search_query = request.args.get('q')
+    if search_query:
+        query = Entry.search(search_query)
+    else:
+        query = Entry.public().order_by(Entry.timestamp.desc())
+    return object_list('index.html', query, search=search_query)
+
+## Displaying draft posts (only available for logged in users)
+@app.route('/drafts/')
+@login_required
+def drafts():
+    query = Entry.drafts().order_by(Entry.timestamp.desc())
+    return object_list('index.html', query)
 
 # Initialization Codes --------------------------------------------------------
 
